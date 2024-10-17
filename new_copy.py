@@ -49,7 +49,7 @@ SHEET_NAME = 'DanawaData'
 CRAWLING_DATA_CSV_FILE = 'CrawlingCategory.csv'
 
 # 크롤링된 데이터를 저장할 디렉토리 설정
-DATA_PATH = 'crawl_data'
+DATA_PATH = r'C:\dev\ZeroMoa\ZeroMoa\crawl_data'  # 절대 경로로 설정
 DATA_REFRESH_PATH = f'{DATA_PATH}/Last_Data'
 
 # 시간대 설정
@@ -77,13 +77,13 @@ class Crawler:
         """
         초기화 메서드.
         - 오류 목록과 크롤링할 카테고리 목록을 초기화합니다.
-        - CrawlingCategory.csv 파일을 읽어 카테고리 이름과 URL을 로드합니다.
+        - CrawlingCategory.csv 파일을 읽 카테고리 이름과 URL을 로드합니다.
         """
         self.errorList = list()  # 크롤링 중 발생한 오류를 저장할 리스트
         self.crawlingCategory = list()  # 크롤링할 카테고리 정보를 저장할 리스트
         
         # CrawlingCategory.csv 파일을 읽어 크롤링할 카테고리 목록을 로드
-        with open('categories.csv', 'r', newline='', encoding='utf-8') as file:  # 파일 이름 변경
+        with open('categories.csv', 'r', newline='', encoding='utf-8') as file:  # 인코딩 명시
             for crawlingValues in csv.reader(file, skipinitialspace=True):
                 # 주석 처리된 줄(//으로 시작하는 줄)은 무시
                 if not crawlingValues[0].startswith(DATA_REMARK):
@@ -109,127 +109,139 @@ class Crawler:
             pool.close()
             pool.join()
 
-    def CrawlingCategory(self, categoryValue):
+    def CrawlingCategory(self, crawlingData):
         """
         각 카테고리를 크롤링하는 메서드.
         - 주어진 카테고리 URL로 이동하여 제품 데이터를 수집하고 CSV 파일로 저장합니다.
         """
-        crawlingName = categoryValue[STR_NAME]  # 카테고리 이름
-        crawlingURL = categoryValue[STR_URL]  # 카테고리 URL
+        crawlingName = crawlingData[STR_NAME].replace('/', '_')  # '/'를 '_'로 대체
+        # 디렉토리 생성
+        directory = os.path.dirname(f'{crawlingName}.csv')
+        if not os.path.exists(directory) and directory != '':
+            os.makedirs(directory)
 
-        print('Crawling Start : ' + crawlingName)
-
-        # 크롤링 데이터를 저장할 CSV 파일 열기
-        crawlingFile = open(f'{crawlingName}.csv', 'w', newline='', encoding='utf8')
-        crawlingData_csvWriter = csv.writer(crawlingFile)
-        # 첫 번째 행에 현재 날짜와 시간 기록
-        crawlingData_csvWriter.writerow([self.GetCurrentDate().strftime('%Y-%m-%d %H:%M:%S')])
-        
+        # 파일 열기
         try:
+            crawlingFile = open(f'{crawlingName}.csv', 'w', newline='', encoding='utf-8')
+            crawlingData_csvWriter = csv.writer(crawlingFile)
 
-            # Chrome 브라우저 초기화 및 페이지 로드
-            browser = webdriver.Chrome(service=Service(CHROMEDRIVER_PATH), options=self.chrome_option)
-            browser.implicitly_wait(5)  # 암묵적 대기 설정
-            browser.get(crawlingURL)  # 크롤링할 카테고리 페이지로 이동
+            # 첫 번째 행에 헤더 추가
+            crawlingData_csvWriter.writerow(['Id', 'Name', 'Type', 'Price', 'Mall'])  # 헤더 추가
+            # 현재 날짜와 시간을 기록할 새로운 행 추가
+            crawlingData_csvWriter.writerow([self.GetCurrentDate().strftime('%Y-%m-%d %H:%M:%S')])
 
-            # 페이지당 제품 수를 90개로 설정
-            browser.find_element(By.XPATH,'//option[@value="90"]').click()
-            wait = WebDriverWait(browser, 5)  # 명시적 대기 설정
-            # 제품 목록 로딩 대기 (로딩 커버 요소가 사라질 때까지 대기)
-            wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
+            # 중복 체크를 위한 집합
+            saved_product_names = set()
 
-            # 총 제품 수 추출
-            crawlingSize = browser.find_element(By.CLASS_NAME,'list_num').text.strip()
-            crawlingSize = crawlingSize.replace(",","").lstrip('(').rstrip(')')
-            # 페이지 수 계산 (올림 처리)
-            crawlingSize = ceil(int(crawlingSize)/90)
+            try:
+                # Chrome 브라우저 초기화 및 페이지 로드
+                browser = webdriver.Chrome(service=Service(CHROMEDRIVER_PATH), options=self.chrome_option)
+                browser.implicitly_wait(5)  # 암묵적 대기 설정
+                browser.get(crawlingData[STR_URL])  # 크롤링할 카테고리 페이지로 이동
 
-            # 각 페이지를 순회하며 데이터 크롤링
-            for i in range(0, crawlingSize):
-                print("Start - " + crawlingName + " " + str(i+1) + "/" + str(crawlingSize) + " Page Start")
-                
-                # 첫 페이지일 경우 '신상품순' 정렬 클릭
-                if i == 0:
-                    browser.find_element(By.XPATH,'//li[@data-sort-method="NEW"]').click()
-                elif i > 0:
-                    # 10의 배수 페이지일 경우 '다음' 버튼 클릭하여 다음 페이지 그룹으로 이동
-                    if i % 10 == 0:
-                        browser.find_element(By.XPATH,'//a[@class="edge_nav nav_next"]').click()
-                    else:
-                        # 현재 페이지 그룹 내에서 페이지 번호 버튼 클���
-                        browser.find_element(By.XPATH,'//a[@class="num "][%d]'%(i%10)).click()
-                
-                # 페이지 로딩 대기
+                # 페이지당 제품 수를 90개로 설정
+                browser.find_element(By.XPATH,'//option[@value="90"]').click()
+                wait = WebDriverWait(browser, 5)  # 명시적 대기 설정
+                # 제품 목록 로딩 대기 (로딩 커버 요소가 사라질 때까지 대기)
                 wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
-                
-                # 제품 리스트 추출
-                productListDiv = browser.find_element(By.XPATH,'//div[@class="main_prodlist main_prodlist_list"]')
-                products = productListDiv.find_elements(By.XPATH,'//ul[@class="product_list"]/li')
 
-                for product in products:
-                    # 제품에 ID가 없으면 건너뜀
-                    if not product.get_attribute('id'):
-                        continue
+                # 총 제품 수 추출
+                crawlingSize = browser.find_element(By.CLASS_NAME,'list_num').text.strip()
+                crawlingSize = crawlingSize.replace(",","").lstrip('(').rstrip(')')
+                # 페이지 수 계산 (올림 처리)
+                crawlingSize = ceil(int(crawlingSize)/90)
 
-                    # 광고 제품 제외 (클래스에 'prod_ad_item'이 있거나 ID가 'ad'로 시작)
-                    if 'prod_ad_item' in product.get_attribute('class').split(' '):
-                        continue
-                    if product.get_attribute('id').strip().startswith('ad'):
-                        continue
-
-                    # 제품 이름 추출
-                    productName = product.find_element(By.XPATH,'./div/div[2]/p/a').text.strip()
-                    # 제품 가격 관련 요소 추출
-                    productPrices = product.find_elements(By.XPATH,'./div/div[3]/ul/li')
+                # 각 페이지를 순회하며 데이터 크롤링
+                for i in range(0, crawlingSize):
+                    print("Start - " + crawlingName + " " + str(i+1) + "/" + str(crawlingSize) + " Page Start")
                     
-                    for productPrice in productPrices:
-                        # 숨겨진 요소 표시 (style에 'display: none'이 있으면 표시하도록 변경)
-                        if 'display: none' in productPrice.get_attribute('style'):
-                            browser.execute_script("arguments[0].style.display = 'block';", productPrice)
-
-                        # 제품 타입 추출 (예: RAM, HDD, SSD 등)
-                        productType = productPrice.find_element(By.XPATH,'./div/p').text.strip()
-                        # 순위 텍스트 제거 (예: '1위 HDD' → 'HDD')
-                        productType = self.RemoveRankText(productType)
-
-                        # 제품 타입을 리스트로 분리 (예: '6TB\n25원/1GB' → ['6TB', '25원/1GB'])
-                        if '\n' in productType:
-                            productTypeList = productType.split('\n')
+                    # 첫 페이지일 경우 '신상품순' 정렬 클릭
+                    if i == 0:
+                        browser.find_element(By.XPATH,'//li[@data-sort-method="NEW"]').click()
+                    elif i > 0:
+                        # 10의 배수 페이지일 경우 '다음' 버튼 클릭하여 다음 페이지 그룹으로 이동
+                        if i % 10 == 0:
+                            browser.find_element(By.XPATH,'//a[@class="edge_nav nav_next"]').click()
                         else:
-                            productTypeList = [productType, ""]
+                            # 현재 페이지 그룹 내에서 페이지 번호 버튼 클릭
+                            browser.find_element(By.XPATH,'//a[@class="num "][%d]'%(i%10)).click()
+                    
+                    # 페이지 로딩 대기
+                    wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
+                    
+                    # 제품 리스트 추출
+                    productListDiv = browser.find_element(By.XPATH,'//div[@class="main_prodlist main_prodlist_list"]')
+                    products = productListDiv.find_elements(By.XPATH,'//ul[@class="product_list"]/li')
 
-                        # 판매처(Mall) 추출
-                        mall = productPrice.find_element(By.XPATH,'./p[1]').text.strip()   
-                        # 가격 추출 및 쉼표 제거
-                        price = productPrice.find_element(By.XPATH,'./p[2]/a/strong').text.replace(",","").strip()
+                    for product in products:
+                        # 제품에 ID가 없으면 건너뜀
+                        if not product.get_attribute('id'):
+                            continue
 
-                        # 제품 ID 추출 (ID 속성의 18번째 문자 이후)
-                        productId = productPrice.get_attribute('id')[18:]
+                        # 광고 제품 제외
+                        if 'prod_ad_item' in product.get_attribute('class').split(' '):
+                            continue
+                        if product.get_attribute('id').strip().startswith('ad'):
+                            continue
 
-                        # 제품의 'spec_list' div 추출
-                        spec_list = product.find_element(By.XPATH, './/div[@class="spec_list"]')
-                        # 필요한 정보 추출 및 처리
-                        spec_list_text = spec_list.text.strip()  # spec_list의 텍스트를 추출하고 공백 제거
+                        # 제품 이름 추출
+                        productName = product.find_element(By.XPATH, './div/div[2]/p/a').text.strip()
 
-                        # CSV 파일에 제품 정보 기록
-                        crawlingData_csvWriter.writerow([productId, productName, productTypeList[0], price, mall, productTypeList[1], spec_list_text])  # spec_list_text 추가
+                        # 중복 체크
+                        if productName in saved_product_names:
+                            continue  # 이미 저장된 제품 이름이면 건너뜀
+                        saved_product_names.add(productName)  # 새 제품 이름 추가
 
-        except Exception as e:
-            # 예외 발생 시 오류 메시지 출력 및 오류 목록에 추가
-            print('Error - ' + crawlingName + ' ->')
-            print(traceback.format_exc())
-            self.errorList.append(crawlingName)
+                        # 제품 가격 관련 요소 추출
+                        productPrices = product.find_elements(By.XPATH, './div/div[3]/ul/li')
 
-        # CSV 파일 닫기
-        crawlingFile.close()
+                        for productPrice in productPrices:
+                            # 숨겨진 요소 표시
+                            if 'display: none' in productPrice.get_attribute('style'):
+                                browser.execute_script("arguments[0].style.display = 'block';", productPrice)
 
-        print('Crawling Finish : ' + crawlingName)
+                            # 제품 타입 추출
+                            productType = productPrice.find_element(By.XPATH, './div/p').text.strip()
+                            productType = self.RemoveRankText(productType)
+
+                            # 제품 타입을 리스트로 분리
+                            if '\n' in productType:
+                                productTypeList = productType.split('\n')
+                            else:
+                                productTypeList = [productType, ""]
+
+                            # 판매처(Mall) 추출
+                            mall = productPrice.find_element(By.XPATH, './p[1]').text.strip()
+                            price = productPrice.find_element(By.XPATH, './p[2]/a/strong').text.replace(",", "").strip()
+                            productId = productPrice.get_attribute('id')[18:]
+
+                            # 제품의 'spec_list' div 추출
+                            spec_list = product.find_element(By.XPATH, './/div[@class="spec_list"]')
+                            spec_list_text = spec_list.text.strip()
+
+                            # CSV 파일에 제품 정보 기록
+                            crawlingData_csvWriter.writerow([productId, productName, productTypeList[0], price, mall, productTypeList[1], spec_list_text])
+
+            except Exception as e:
+                # 예외 발생 시 오류 메시지 출력 및 오류 목록에 추가
+                print('Error - ' + crawlingName + ' ->')
+                print(traceback.format_exc())
+                self.errorList.append(crawlingName)
+
+            # CSV 파일 닫기
+            crawlingFile.close()
+
+            print('Crawling Finish : ' + crawlingName)
+
+        except FileNotFoundError as e:
+            print(f"Error: {e}")
+            print(f"Directory does not exist for: {crawlingName}")
 
     def RemoveRankText(self, productType):
         """
         제품 유형에서 순위 텍스트를 제거하는 메서드.
         """
-        # 예시: '1위', '2위'와 같은 텍스트를 제거
+        # 예시: '1위', '2'와 같은 텍스트를 제거
         return productType.replace("위", "").strip()  # 필요에 따라 수정 가능
 
     def DataSort(self):
@@ -251,7 +263,7 @@ class Crawler:
             dataList = list()  # 정렬된 데이터 리스트
 
             # CSV 파일 읽기
-            with open(crawlingDataPath, 'r', newline='', encoding='utf8') as file:
+            with open(crawlingDataPath, 'r', newline='', encoding='utf-8') as file:  # 인코딩 명시
                 csvReader = csv.reader(file)
                 for row in csvReader:
                     crawl_dataList.append(row)
@@ -295,7 +307,7 @@ class Crawler:
             dataList.sort(key= lambda x: x[0])
                 
             # 정렬된 데이터를 CSV 파일에 기록
-            with open(dataPath, 'w', newline='', encoding='utf8') as file:
+            with open(dataPath, 'w', newline='', encoding='utf-8') as file:  # 인코딩 명시
                 csvWriter = csv.writer(file)
                 csvWriter.writerow(firstRow)
                 for data in dataList:
@@ -310,7 +322,7 @@ class Crawler:
         """
         주어진 경로의 CSV 파일을 비우는 메서드.
         """
-        with open(crawlingDataPath, 'w', newline='') as file:
+        with open(crawlingDataPath, 'w', newline='') as file:  # 인코딩 명시
             csvWriter = csv.writer(file)
             csvWriter.writerows([])
 
