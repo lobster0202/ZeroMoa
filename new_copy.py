@@ -99,7 +99,7 @@ class Crawler:
         self.chrome_option.add_argument('--window-size=1920,1080')  # 창 크기 설정
         self.chrome_option.add_argument('--start-maximized')  # 최대화 옵션
         self.chrome_option.add_argument('--disable-gpu')  # GPU 사용 비활성화
-        self.chrome_option.add_argument('lang=ko=KR')  # 브라우저 언어 설정
+        self.chrome_option.add_argument('lang=ko=KR')  # 브라우저 언�� 설정
 
         if __name__ == '__main__':
             # 멀티프로세싱 풀 생성
@@ -125,10 +125,8 @@ class Crawler:
             crawlingFile = open(f'{crawlingName}.csv', 'w', newline='', encoding='utf-8')
             crawlingData_csvWriter = csv.writer(crawlingFile)
 
-            # 첫 번째 행에 헤더 추가
-            crawlingData_csvWriter.writerow(['Id', 'Name', 'Type', 'Price', 'Mall'])  # 헤더 추가
-            # 현재 날짜와 시간을 기록할 새로운 행 추가
-            crawlingData_csvWriter.writerow([self.GetCurrentDate().strftime('%Y-%m-%d %H:%M:%S')])
+            # 헤더 수정
+            crawlingData_csvWriter.writerow(['Name', 'Spec'])
 
             # 중복 체크를 위한 집합
             saved_product_names = set()
@@ -192,35 +190,12 @@ class Crawler:
                             continue  # 이미 저장된 제품 이름이면 건너뜀
                         saved_product_names.add(productName)  # 새 제품 이름 추가
 
-                        # 제품 가격 관련 요소 추출
-                        productPrices = product.find_elements(By.XPATH, './div/div[3]/ul/li')
+                        # 제품의 'spec_list' div 추출
+                        spec_list = product.find_element(By.XPATH, './/div[@class="spec_list"]')
+                        spec_list_text = spec_list.text.strip()
 
-                        for productPrice in productPrices:
-                            # 숨겨진 요소 표시
-                            if 'display: none' in productPrice.get_attribute('style'):
-                                browser.execute_script("arguments[0].style.display = 'block';", productPrice)
-
-                            # 제품 타입 추출
-                            productType = productPrice.find_element(By.XPATH, './div/p').text.strip()
-                            productType = self.RemoveRankText(productType)
-
-                            # 제품 타입을 리스트로 분리
-                            if '\n' in productType:
-                                productTypeList = productType.split('\n')
-                            else:
-                                productTypeList = [productType, ""]
-
-                            # 판매처(Mall) 추출
-                            mall = productPrice.find_element(By.XPATH, './p[1]').text.strip()
-                            price = productPrice.find_element(By.XPATH, './p[2]/a/strong').text.replace(",", "").strip()
-                            productId = productPrice.get_attribute('id')[18:]
-
-                            # 제품의 'spec_list' div 추출
-                            spec_list = product.find_element(By.XPATH, './/div[@class="spec_list"]')
-                            spec_list_text = spec_list.text.strip()
-
-                            # CSV 파일에 제품 정보 기록
-                            crawlingData_csvWriter.writerow([productId, productName, productTypeList[0], price, mall, productTypeList[1], spec_list_text])
+                        # CSV 파일에 제품 이름과 스펙 정보만 기록
+                        crawlingData_csvWriter.writerow([productName, spec_list_text])
 
             except Exception as e:
                 # 예외 발생 시 오류 메시지 출력 및 오류 목록에 추가
@@ -237,86 +212,62 @@ class Crawler:
             print(f"Error: {e}")
             print(f"Directory does not exist for: {crawlingName}")
 
-    def RemoveRankText(self, productType):
-        """
-        제품 유형에서 순위 텍스트를 제거하는 메서드.
-        """
-        # 예시: '1위', '2'와 같은 텍스트를 제거
-        return productType.replace("위", "").strip()  # 필요에 따라 수정 가능
-
     def DataSort(self):
-        """
-        크롤링된 데이터를 정렬하는 메서드.
-        - 각 카테고리별 CSV 파일을 읽어 ID 기준으로 정렬한 후 다시 저장합니다.
-        """
-        print('Data Sort')
+        print('데이터 정렬 시작')
 
         for crawlingValue in self.crawlingCategory:
-            dataName = crawlingValue[STR_NAME]
+            dataName = crawlingValue[STR_NAME].replace('/', '_')  # '/'를 '_'로 대체
             crawlingDataPath = f'{dataName}.csv'
             
-            # 해당 카테고리의 CSV 파일이 없으면 건너뜀
             if not os.path.exists(crawlingDataPath):
+                print(f"파일을 찾을 수 없음: {crawlingDataPath}")
                 continue
 
-            crawl_dataList = list()  # 원본 데이터 리스트
-            dataList = list()  # 정렬된 데이터 리스트
+            crawl_dataList = list()
+            dataList = list()
 
-            # CSV 파일 읽기
-            with open(crawlingDataPath, 'r', newline='', encoding='utf-8') as file:  # 인코딩 명시
-                csvReader = csv.reader(file)
-                for row in csvReader:
-                    crawl_dataList.append(row)
+            try:
+                with open(crawlingDataPath, 'r', newline='', encoding='utf-8-sig') as file:  # BOM 처리를 위해 'utf-8-sig' 사용
+                    csvReader = csv.reader(file)
+                    for row in csvReader:
+                        crawl_dataList.append(row)
             
-            # 데이터가 없으면 건너뜀
-            if len(crawl_dataList) == 0:
-                continue
-            
-            # 정렬된 데이터를 저장할 경로 설정
-            dataPath = f'{DATA_PATH}/{dataName}.csv'
-
-            # 저장할 경로에 파일이 없으면 새로 생성
-            if not os.path.exists(dataPath):
-                file = open(dataPath, 'w', encoding='utf8')
-                file.close()
-
-            # 기존 데이터를 초기화
-            self.ResetCsv(dataPath)
-            
-            # 첫 번째 행에 헤더 추가
-            firstRow = ['Id', 'Name', 'Type', 'Price', 'Mall']
-            firstRow.append(crawl_dataList.pop(0)[0])  # 첫 번째 행에 날짜 및 시간 추가
-            
-            for product in crawl_dataList:
-                # ID가 숫자가 아닌 경우 건너뜀
-                if not str(product[0]).isdigit():
+                if len(crawl_dataList) == 0:
+                    print(f"데이터가 없음: {crawlingDataPath}")
                     continue
-                
-                # 새 데이터 리스트 생성
-                newDataList = []
-                for i in range(0, len(product)):
-                    if i == 0:
-                        # ID를 정수로 변환
-                        newDataList.append(int(product[i]))
-                    else:
-                        newDataList.append(product[i])
-
-                dataList.append(newDataList)
             
-            # ID 기준으로 오름차순 정렬
-            dataList.sort(key= lambda x: x[0])
+                # DATA_PATH가 존재하는지 확인하고 없으면 생성
+                if not os.path.exists(DATA_PATH):
+                    os.makedirs(DATA_PATH)
                 
-            # 정렬된 데이터를 CSV 파일에 기록
-            with open(dataPath, 'w', newline='', encoding='utf-8') as file:  # 인코딩 명시
-                csvWriter = csv.writer(file)
-                csvWriter.writerow(firstRow)
-                for data in dataList:
-                    csvWriter.writerow(data)
-                file.close()
+                dataPath = os.path.join(DATA_PATH, f'{dataName}.csv')
+
+                self.ResetCsv(dataPath)
+            
+                firstRow = ['Name', 'Spec']
+                if len(crawl_dataList) > 0 and len(crawl_dataList[0]) > 0:
+                    firstRow.append(crawl_dataList.pop(0)[0])
+            
+                for product in crawl_dataList:
+                    dataList.append(product)
+            
+                # 제품 이름으로 정렬
+                dataList.sort(key=lambda x: x[0] if len(x) > 0 else '')
                 
-            # 원본 CSV 파일 삭제
-            if os.path.isfile(crawlingDataPath):
-                os.remove(crawlingDataPath)
+                with open(dataPath, 'w', newline='', encoding='utf-8') as file:
+                    csvWriter = csv.writer(file)
+                    csvWriter.writerow(firstRow)
+                    for data in dataList:
+                        csvWriter.writerow(data)
+                
+                if os.path.isfile(crawlingDataPath):
+                    os.remove(crawlingDataPath)
+                
+                print(f"정렬 완료: {dataName}")
+
+            except Exception as e:
+                print(f"오류 발생 - {dataName}: {str(e)}")
+                traceback.print_exc()
 
     def ResetCsv(self, crawlingDataPath):
         """
