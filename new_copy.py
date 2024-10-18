@@ -10,6 +10,11 @@ from datetime import datetime
 from datetime import timedelta
 from pytz import timezone
 
+# 전체 과정 요약
+# 1. 크롤링
+# 2. 정렬
+# 3. 정제 및 중복 제거
+
 # Google 스프레드시트 저장 관련 라이브러리 (현재 주석 처리됨)
 # from oauth2client.service_account import ServiceAccountCredentials
 # import gspread
@@ -72,6 +77,10 @@ STR_NAME = 'name'
 STR_URL = 'url'
 STR_CRAWLING_PAGE_SIZE = 'crawlingPageSize'
 
+# 정규 표현식과 defaultdict를 위한 추가 import
+import re
+from collections import defaultdict
+
 class Crawler:
     def __init__(self):
         """
@@ -99,7 +108,7 @@ class Crawler:
         self.chrome_option.add_argument('--window-size=1920,1080')  # 창 크기 설정
         self.chrome_option.add_argument('--start-maximized')  # 최대화 옵션
         self.chrome_option.add_argument('--disable-gpu')  # GPU 사용 비활성화
-        self.chrome_option.add_argument('lang=ko=KR')  # 브라우저 언�� 설정
+        self.chrome_option.add_argument('lang=ko=KR')  # 브라우저 언 설정
 
         if __name__ == '__main__':
             # 멀티프로세싱 풀 생성
@@ -213,12 +222,16 @@ class Crawler:
             print(f"Directory does not exist for: {crawlingName}")
 
     def DataSort(self):
+        """
+        크롤링된 데이터를 정렬하고, 정제하며, 중복을 제거하는 메서드
+        """
         print('데이터 정렬 시작')
 
         for crawlingValue in self.crawlingCategory:
-            dataName = crawlingValue[STR_NAME].replace('/', '_')  # '/'를 '_'로 대체
+            dataName = crawlingValue[STR_NAME].replace('/', '_')  # 파일명에 사용할 수 없는 문자 대체
             crawlingDataPath = f'{dataName}.csv'
             
+            # 크롤링된 파일이 존재하는지 확인
             if not os.path.exists(crawlingDataPath):
                 print(f"파일을 찾을 수 없음: {crawlingDataPath}")
                 continue
@@ -227,43 +240,54 @@ class Crawler:
             dataList = list()
 
             try:
-                with open(crawlingDataPath, 'r', newline='', encoding='utf-8-sig') as file:  # BOM 처리를 위해 'utf-8-sig' 사용
+                # 크롤링된 데이터 파일 읽기
+                with open(crawlingDataPath, 'r', newline='', encoding='utf-8-sig') as file:
                     csvReader = csv.reader(file)
                     for row in csvReader:
                         crawl_dataList.append(row)
             
+                # 데이터가 비어있는지 확인
                 if len(crawl_dataList) == 0:
                     print(f"데이터가 없음: {crawlingDataPath}")
                     continue
             
-                # DATA_PATH가 존재하는지 확인하고 없으면 생성
+                # 데이터 저장 경로 확인 및 생성
                 if not os.path.exists(DATA_PATH):
                     os.makedirs(DATA_PATH)
                 
                 dataPath = os.path.join(DATA_PATH, f'{dataName}.csv')
 
+                # CSV 파일 초기화
                 self.ResetCsv(dataPath)
             
+                # 헤더 행 설정
                 firstRow = ['Name', 'Spec']
                 if len(crawl_dataList) > 0 and len(crawl_dataList[0]) > 0:
                     firstRow.append(crawl_dataList.pop(0)[0])
             
+                # 데이터 리스트에 추가
                 for product in crawl_dataList:
                     dataList.append(product)
             
-                # 제품 이름으로 정렬
+                # 제품 이름으로 데이터 정렬
                 dataList.sort(key=lambda x: x[0] if len(x) > 0 else '')
                 
+                # 정렬된 데이터를 CSV 파일에 쓰기
                 with open(dataPath, 'w', newline='', encoding='utf-8') as file:
                     csvWriter = csv.writer(file)
                     csvWriter.writerow(firstRow)
                     for data in dataList:
                         csvWriter.writerow(data)
                 
+                # 원본 크롤링 파일 삭제
                 if os.path.isfile(crawlingDataPath):
                     os.remove(crawlingDataPath)
                 
                 print(f"정렬 완료: {dataName}")
+
+                # 정제 및 중복 제거 과정 수행
+                self.remove_duplicates_and_units(dataPath, os.path.join(DATA_PATH, f"정제_중복제거_{dataName}.csv"))
+                print(f"정제 및 중복 제거 완료: {dataName}")
 
             except Exception as e:
                 print(f"오류 발생 - {dataName}: {str(e)}")
@@ -271,23 +295,70 @@ class Crawler:
 
     def ResetCsv(self, crawlingDataPath):
         """
-        주어진 경로의 CSV 파일을 비우는 메서드.
+        주어진 경로의 CSV 파일을 초기화하는 메서드
         """
-        with open(crawlingDataPath, 'w', newline='') as file:  # 인코딩 명시
+        with open(crawlingDataPath, 'w', newline='') as file:
             csvWriter = csv.writer(file)
             csvWriter.writerows([])
 
     def GetCurrentDate(self):
         """
-        현재 날짜와 시간을 반환하는 메서드.
-        - 설정된 시간대(Asia/Seoul)를 사용합니다.
+        현재 날짜와 시간을 반환하는 메서드
         """
         tz = timezone(TIMEZONE)
         return datetime.now(tz)
 
-                           
+    def clean_product_name(self, name):
+        """
+        제품 이름에서 단위와 괄호 내용을 제거하는 메서드
+        """
+        # 끝 부분의 숫자와 단위(ml, 정, 포 등)를 제거하는 패턴
+        pattern = r'\s*\d+(?:\.\d+)?\s*(?:ml|정|포|l|g|kg|mg|개|can|캔|팩|페트|병|입|박스|캡슐|스틱|매|베지캡슐|분|da|달톤|mgα-te|mgne|㎍re|㎍|μg)(?:\s*x\s*\d+(?:개|팩|병|캔|박스|정|포|매|스틱)?)?\s*'
+        
+        # 괄호 안의 내용을 제거하는 패턴
+        bracket_pattern = r'\s*\([^)]*\)\s*'
+        
+        # 패턴을 반복적으로 적용
+        prev_name = name
+        while True:
+            cleaned = re.sub(pattern, '', prev_name, flags=re.IGNORECASE)
+            cleaned = re.sub(bracket_pattern, '', cleaned)
+            cleaned = cleaned.strip()
+            if cleaned == prev_name:  # 더 이상 변화가 없으면 종료
+                break
+            prev_name = cleaned
+        
+        return cleaned
+
+    def remove_duplicates_and_units(self, input_file, output_file):
+        """
+        입력 파일에서 중복을 제거하고 단위를 정제하여 출력 파일에 저장하는 메서드
+        """
+        unique_entries = defaultdict(list)
+
+        # 입력 파일 읽기
+        with open(input_file, 'r', encoding='utf-8') as f:
+            reader = csv.reader(f)
+            header = next(reader, None)  # 헤더 행 읽기
+            for row in reader:
+                if row:
+                    cleaned_name = self.clean_product_name(row[0])
+                    key = cleaned_name.split(',')[0]
+                    row[0] = cleaned_name  # 정제된 이름으로 업데이트
+                    # 더 많은 정보를 가진 행을 유지
+                    if key not in unique_entries or len(row) > len(unique_entries[key][0]):
+                        unique_entries[key] = [row]
+
+        # 정제된 데이터를 출력 파일에 쓰기
+        with open(output_file, 'w', encoding='utf-8', newline='') as f:
+            writer = csv.writer(f)
+            if header:
+                writer.writerow(header)  # 헤더 행 쓰기
+            for entries in unique_entries.values():
+                writer.writerow(entries[0])
+
 # 메인 실행 블록
 if __name__ == '__main__':
     crawler = Crawler()  # 크롤러 인스턴스 생성
     crawler.StartCrawling()  # 크롤링 시작
-    crawler.DataSort()  # 데이터 정렬
+    crawler.DataSort()  # 데이터 정렬, 정제, 중복 제거 수행
