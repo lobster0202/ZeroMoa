@@ -54,7 +54,7 @@ SHEET_NAME = 'DanawaData'
 CRAWLING_DATA_CSV_FILE = 'CrawlingCategory.csv'
 
 # 크롤링된 데이터를 저장할 디렉토리 설정
-DATA_PATH = r'C:\dev\ZeroMoa\ZeroMoa\crawl_data'  # 절대 경로로 설정
+DATA_PATH = r'C:\dev\ZeroMoa\Danawa-Crawler\crawl_data'  # 절대 경로로 설정
 DATA_REFRESH_PATH = f'{DATA_PATH}/Last_Data'
 
 # 시간대 설정
@@ -261,9 +261,10 @@ class Crawler:
                 self.ResetCsv(dataPath)
             
                 # 헤더 행 설정
-                firstRow = ['Name', 'Spec']
+                firstRow = ['Name', 'Spec']  # 기본 헤더 설정
                 if len(crawl_dataList) > 0 and len(crawl_dataList[0]) > 0:
-                    firstRow.append(crawl_dataList.pop(0)[0])
+                    # 첫 번째 데이터의 첫 번째 열을 추가하는 부분 수정
+                    firstRow.append(crawl_dataList[0][0])  # 첫 번째 데이터의 첫 번째 열을 추가
             
                 # 데이터 리스트에 추가
                 for product in crawl_dataList:
@@ -362,3 +363,4 @@ if __name__ == '__main__':
     crawler = Crawler()  # 크롤러 인스턴스 생성
     crawler.StartCrawling()  # 크롤링 시작
     crawler.DataSort()  # 데이터 정렬, 정제, 중복 제거 수행
+
