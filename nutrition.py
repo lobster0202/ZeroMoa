@@ -135,7 +135,19 @@ def get_nutrition_fields():
         "티로신": "tyrosine_mg",
         "페닐알라닌": "phenylalanine_mg",
         "프롤린": "proline_mg",
-        "히스티딘": "histidine_mg"
+        "히스티딘": "histidine_mg",
+        "카페인": "caffeine_mg",
+        "카페인함량": "caffeine_mg",  # 카페인과 동일하게 처리
+        "고카페인": "caffeine_mg",    # 카페인과 동일하게 처리
+        "HCA": "hca_mg",
+        "DHA+EPA": "epa_dha_mg",     # 기존 epa_dha_mg와 동일하게 처리
+        "자일로올리고당": "xylooligosaccharide_mg",
+        "락추로스": "lactulose_mg",
+        "락토페린": "lactoferrin_mg",
+        "알룰로스": "allulose_g",     # 기존 allulose_g와 동일하게 처리
+        "저분자 콜라겐펩타이드": "low_molecular_collagen_peptide_mg",
+        "카르니틴": "carnitine_mg",
+        "카테킨": "catechin_mg"
     }
 
     known_fields = set(FIELD_MAPPING.keys())
@@ -148,6 +160,22 @@ def get_nutrition_fields():
     total_files = 0
     files_with_nutrition = 0
     
+    # 찾고자 하는 새로운 영양소들과 그들의 단위를 추적하기 위한 딕셔너리
+    NEW_NUTRIENTS = {
+        "카페인": set(),
+        "카페인함량": set(),
+        "고카페인": set(),
+        "HCA": set(),
+        "DHA+EPA": set(),
+        "자일로올리고당": set(),
+        "락추로스": set(),
+        "락토페린": set(),
+        "알룰로스": set(),
+        "저분자 콜라겐펩타이드": set(),
+        "카르니틴": set(),
+        "카테킨": set()
+    }
+
     for csv_file in crawl_data_path.glob('*.csv'):
         total_files += 1
         print(f"\n2. 처리 중인 파일: {csv_file.name}")
@@ -174,17 +202,22 @@ def get_nutrition_fields():
                             if ':' in nutrient:
                                 name, value = nutrient.split(':', 1)
                                 name = name.strip()
+                                value = value.strip()
                                 
-                                # 단위 제거
-                                original_name = name
-                                for unit in ['kcal', 'g', 'mg', 'μg']:
-                                    if unit in name:
-                                        name = name.replace(unit, '').strip()
-                                        break
-                                
-                                if name and name not in known_fields:
-                                    unknown_fields.add(name)
-                                    print(f"4. 새로운 영양소 발견: {original_name} -> {name}")
+                                # 새로운 영양소 확인 및 단위 추출
+                                for target in NEW_NUTRIENTS.keys():
+                                    if target in name:
+                                        # 단위 추출 시도
+                                        unit = ''
+                                        value = value.strip()
+                                        # 일반적인 단위 패턴 확인
+                                        for unit_pattern in ['mg', 'μg', 'g', 'kcal', '%', 'ml']:
+                                            if unit_pattern in value:
+                                                unit = unit_pattern
+                                                break
+                                        if unit:
+                                            NEW_NUTRIENTS[target].add(unit)
+                                            print(f"발견된 영양소: {name} - 값: {value} (단위: {unit})")
             
             # 컬럼명 확인
             nutrition_cols = [col for col in df.columns if any(unit in col for unit in ['(g)', '(mg)', '(μg)', '(kcal)'])]
@@ -220,7 +253,26 @@ def get_nutrition_fields():
     else:
         print("\n새로운 영양소 필드가 발견되지 않았습니다.")
     
-    return unknown_fields
+    print("\n=== 새로운 영양소 단위 분석 결과 ===")
+    for nutrient, units in NEW_NUTRIENTS.items():
+        if units:
+            print(f"{nutrient}: {', '.join(units)}")
+        else:
+            print(f"{nutrient}: 단위를 찾을 수 없음")
+
+    # 결과를 CSV 파일로 저장
+    results = []
+    for nutrient, units in NEW_NUTRIENTS.items():
+        results.append({
+            'nutrient': nutrient,
+            'units': ', '.join(units) if units else '단위 없음',
+        })
+    
+    results_df = pd.DataFrame(results)
+    results_df.to_csv('nutrient_units_analysis.csv', index=False, encoding='utf-8')
+    print("\nnutrient_units_analysis.csv 파일이 생성되었습니다.")
+
+    return NEW_NUTRIENTS
 
 
 if __name__ == "__main__":
