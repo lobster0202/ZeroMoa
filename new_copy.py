@@ -363,9 +363,32 @@ class Crawler:
             writer = csv.writer(f)
             writer.writerow(header)
             for entries in unique_entries.values():
+                # 이미지 파일명도 정제된 이름으로 변경
+                entries[0][2] = self.update_image_name(entries[0][2], entries[0][0])
                 writer.writerow(entries[0])
 
-    def save_image(self, image_url, product_name, max_retries=3):
+    def update_image_name(self, image_path, new_name):
+        """
+        이미지 파일명을 정제된 이름으로 변경하는 메서드
+        """
+        if not image_path:
+            return ''
+        
+        # 기존 이미지 경로에서 파일명 추출
+        old_name = os.path.basename(image_path)
+        old_dir = os.path.dirname(image_path)
+        
+        # 새로운 파일명 생성
+        safe_name = re.sub(r'[\\/*?:"<>|]', '', new_name)
+        new_image_path = os.path.join(old_dir, f"{safe_name}.jpg")
+        
+        # 파일명 변경
+        if os.path.exists(image_path) and not os.path.exists(new_image_path):
+            os.rename(image_path, new_image_path)
+        
+        return new_image_path
+
+    def save_image(self, image_url, product_name, csv_name, max_retries=3):
         """
         이미지 URL에서 이미지를 다운로드하여 저장하는 메서드
         max_retries: 최대 재시도 횟수
@@ -374,16 +397,22 @@ class Crawler:
             try:
                 if 'noImg' in image_url:  # 기본 이미지인 경우 저장하지 않음
                     return ''
-                    
+                
+                # 이미지 저장 경로 생성
+                safe_csv_name = re.sub(r'[\\/*?:"<>|]', '', csv_name)
+                image_dir = os.path.join(self.image_path, safe_csv_name)
+                if not os.path.exists(image_dir):
+                    os.makedirs(image_dir)
+                
                 # 이미지 파일명 생성 (제품명에서 특수문자 제거)
                 safe_name = re.sub(r'[\\/*?:"<>|]', '', product_name)
                 image_filename = f"{safe_name}.jpg"
-                save_path = os.path.join(self.image_path, image_filename)
+                save_path = os.path.join(image_dir, image_filename)
                 
                 # 이미지가 이미 존재하는 경우 건너뛰기
                 if os.path.exists(save_path):
                     return save_path
-                    
+                
                 # SSL 검증을 비활성화하고 이미지 다운로드
                 session = requests.Session()
                 session.mount('https://', requests.adapters.HTTPAdapter(
@@ -422,11 +451,7 @@ class Crawler:
                 else:
                     print(f"이미지 다운로드 재시도 중... ({attempt + 1}/{max_retries})")
                     sleep(2)  # 재시도 전 대기
-                    
-            except Exception as e:
-                print(f"이미지 저장 중 오류 발생 ({product_name}): {str(e)}")
-                return ''
-                
+
         return ''  # 모든 시도 실패 시
 
 # 메인 실행 블록
