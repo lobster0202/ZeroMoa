@@ -4,6 +4,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
+from selenium.common.exceptions import TimeoutException
 
 # 날짜 및 시간 관련 라이브러리 임포트
 from datetime import datetime
@@ -43,6 +44,15 @@ from PIL import Image
 from io import BytesIO
 import re
 from collections import defaultdict
+import psutil
+
+# SSL 경고 메시지 비활성화 (선택사항)
+import urllib3
+import warnings
+
+# SSL 경고 메시지 비활성화
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # 멀티프로세싱에서 사용할 프로세스 수 설정
 PROCESS_COUNT = 12
@@ -56,7 +66,7 @@ SHEET_KEYFILE = 'danawa-428617-f6496870d619.json'
 SHEET_NAME = 'DanawaData'
 
 # 크롤링할 카테고리 정보가 담긴 CSV 파일명
-CRAWLING_DATA_CSV_FILE = 'CrawlingCategory.csv'
+CRAWLING_DATA_CSV_FILE = 'categories.csv'
 
 # 크롤링된 데이터를 저장할 디렉토리 설정
 DATA_PATH = r'C:\dev\ZeroMoa\ZeroMoa\crawl_data'  # 절대 경로로 수정
@@ -70,7 +80,7 @@ TIMEZONE = 'Asia/Seoul'
 # CHROMEDRIVER_PATH = 'chromedriver'
 CHROMEDRIVER_PATH = 'chromedriver-win64/chromedriver.exe'
 
-# 데이터 구분자 설정 (필요 시 사용)
+# 데터 구분자 설정 (필요 시 사용)
 DATA_DIVIDER = '---'
 DATA_REMARK = '//'
 DATA_ROW_DIVIDER = ' - '
@@ -87,14 +97,17 @@ class Crawler:
         """
         초기화 메서드.
         - 오류 목록과 크롤링할 카테고리 목록을 초기화합니다.
-        - CrawlingCategory.csv 파일을 읽 카테고리 이름과 URL을 로드합니다.
+        - categories.csv 파일을 읽어 카테고리 이름과 URL을 로드합니다.
         """
         self.errorList = list()  # 크롤링 중 발생한 오류를 저장할 리스트
         self.crawlingCategory = list()  # 크롤링할 카테고리 정보를 저장할 리스트
         
-        # CrawlingCategory.csv 파일을 읽어 크롤링할 카테고리 목록을 로드
-        with open('categories.csv', 'r', newline='', encoding='utf-8') as file:  # 인코딩 명시
-            for crawlingValues in csv.reader(file, skipinitialspace=True):
+        # categories.csv 파일을 읽어 크롤링할 카테고리 목록을 로드
+        with open('categories.csv', 'r', newline='', encoding='utf-8') as file:
+            csv_reader = csv.reader(file, skipinitialspace=True)
+            next(csv_reader)  # 첫 줄(헤더) 건너뛰기
+            
+            for crawlingValues in csv_reader:
                 # 주석 처리된 줄(//으로 시작하는 줄)은 무시
                 if not crawlingValues[0].startswith(DATA_REMARK):
                     # 카테고리 이름과 URL을 딕셔너리 형태로 리스트에 추가
@@ -113,22 +126,23 @@ class Crawler:
         self.chrome_option.add_argument('--window-size=1920,1080')  # 창 크기 설정
         self.chrome_option.add_argument('--start-maximized')  # 최대화 옵션
         self.chrome_option.add_argument('--disable-gpu')  # GPU 사용 비활성화
-        self.chrome_option.add_argument('lang=ko=KR')  # 브라우저 언 설정
+        self.chrome_option.add_argument('lang=ko=KR')  # 브라우저 언어 설정
+        self.chrome_option.add_argument('--disable-blink-features=AutomationControlled')
+        self.chrome_option.add_argument('--disable-web-security')
+        self.chrome_option.add_experimental_option('excludeSwitches', ['enable-automation'])
+        self.chrome_option.add_experimental_option('useAutomationExtension', False)
 
-        if __name__ == '__main__':
-            # 멀티프로세싱 풀 생성
-            pool = Pool(PROCESS_COUNT)
-            # CrawlingCategory 메서드를 각 카테고리에 병렬로 적용
-            pool.map(self.CrawlingCategory, self.crawlingCategory)
-            pool.close()
-            pool.join()
+        # 멀티프로세싱 풀 생성
+        pool = Pool(PROCESS_COUNT)
+        pool.map(self.CrawlingCategory, self.crawlingCategory)
+        pool.close()
+        pool.join()
 
     def CrawlingCategory(self, crawlingData):
         """
-        각 카테고리를 크롤링하는 메서드.
+        각 카테고리를 크롤링하는 메서드
         """
         crawlingName = crawlingData[STR_NAME].replace('/', '_')
-        saved_product_names = set()
         browser = None
         
         try:
@@ -150,7 +164,7 @@ class Crawler:
                     browser.implicitly_wait(10)
                     browser.get(crawlingData[STR_URL])  # 크롤링할 카테고리 페이지로 이동
 
-                    # 페이지당 제품 수를 90개로 설정
+                    # 페이지 제품 수를 90개로 정
                     browser.find_element(By.XPATH,'//option[@value="90"]').click()
                     wait = WebDriverWait(browser, 10)  # 명시적 대기 시간 증가
                     
@@ -168,72 +182,100 @@ class Crawler:
                     # 페이지 수 계산 (올림 처리)
                     crawlingSize = ceil(int(crawlingSize)/90)
 
-                    # 각 페이지를 순회하며 데이터 크롤링
-                    for i in range(0, crawlingSize):
-                        print("Start - " + crawlingName + " " + str(i+1) + "/" + str(crawlingSize) + " Page Start")
-                        
-                        # 첫 페이지일 경우 '신상품순' 정렬 클릭
-                        if i == 0:
-                            browser.find_element(By.XPATH,'//li[@data-sort-method="NEW"]').click()
-                        elif i > 0:
-                            # 10의 배수 페이지일 경우 '다음' 버튼 클릭하여 다음 페이지 그룹으로 이동
-                            if i % 10 == 0:
-                                browser.find_element(By.XPATH,'//a[@class="edge_nav nav_next"]').click()
-                            else:
-                                # 현재 페이지 그룹 내에서 페이지 번호 버튼 클릭
-                                browser.find_element(By.XPATH,'//a[@class="num "][%d]'%(i%10)).click()
-                        
-                        # 페이지 로딩 대기
-                        wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
-                        
-                        # 제품 리스트 추출
-                        productListDiv = browser.find_element(By.XPATH,'//div[@class="main_prodlist main_prodlist_list"]')
-                        products = productListDiv.find_elements(By.XPATH,'//ul[@class="product_list"]/li')
-
-                        for product in products:
-                            # 제품에 ID가 없으면 건너뜀
-                            if not product.get_attribute('id'):
-                                continue
-
-                            # 광고 제품 제외
-                            if 'prod_ad_item' in product.get_attribute('class').split(' '):
-                                continue
-                            if product.get_attribute('id').strip().startswith('ad'):
-                                continue
-
-                            # 제품 이름 추출
-                            productName = product.find_element(By.XPATH, './div/div[2]/p/a').text.strip()
+                    page = 1
+                    while True:
+                        try:
+                            print(f"{crawlingName} 카테고리 {page}/{crawlingSize} 페이지 크롤링 시작")  # 페이지 시작 알림
                             
-                            # 이미지 URL 추출 및 이미지 저장
-                            try:
-                                image_element = product.find_element(By.XPATH, './/div[@class="thumb_image"]//img')
-                                image_url = image_element.get_attribute('src')
-                                if image_url.startswith('//'):
-                                    image_url = 'https:' + image_url
+                            # 페이지 로딩 대기
+                            wait = WebDriverWait(browser, 10)
+                            wait.until(EC.presence_of_all_elements_located((By.CLASS_NAME, 'prod_main_info')))
+                            
+                            # 현재 페이지의 제품들 처리
+                            products = browser.find_elements(By.CLASS_NAME, 'prod_main_info')
+                            
+                            for product in products:
+                                try:
+                                    # 제품명 추출
+                                    productName = product.find_element(By.XPATH, './/p[@class="prod_name"]/a').text.strip()
                                     
-                                # 이미지 저장 및 로컬 경로 획득
-                                local_image_path = self.save_image(image_url, productName)
-                            except:
-                                local_image_path = ''
-
-                            # 중복 체크
-                            if productName in saved_product_names:
-                                continue
-                            saved_product_names.add(productName)
-
-                            # 스펙 리스트 추출
-                            spec_list = product.find_element(By.XPATH, './/div[@class="spec_list"]')
-                            spec_list_text = spec_list.text.strip()
-
-                            # CSV 파일에 제품 이름, 스펙, 로컬 이미지 경로 기록
-                            crawlingData_csvWriter.writerow([productName, spec_list_text, local_image_path])
+                                    # 스펙 정보 추출 추가
+                                    try:
+                                        spec_element = product.find_element(By.CLASS_NAME, 'spec_list')
+                                        spec_list_text = spec_element.text.strip()
+                                    except:
+                                        spec_list_text = ""  # 스펙 정보가 없는 경우 빈 문자열로 설정
+                                    
+                                    # 이미지 URL 추출
+                                    image_element = product.find_element(By.CSS_SELECTOR, '.thumb_image img')
+                                    image_url = image_element.get_attribute('data-original') or image_element.get_attribute('src')
+                                    if image_url.startswith('//'):
+                                        image_url = 'https:' + image_url
+                                        
+                                    # 이미지 저장 시 파일명을 제품명으로 정확히 지정
+                                    local_image_path = self.save_image(image_url, productName.replace('/', '_'), crawlingName)
+                                    
+                                    # CSV에 저장
+                                    crawlingData_csvWriter.writerow([productName, spec_list_text, local_image_path])
+                                    
+                                except Exception as e:
+                                    print(f"제품 처리 중 오류 발생 ({productName if 'productName' in locals() else 'unknown'}): {str(e)}")
+                                    continue
+                            
+                            # 다음 페이지로 이동
+                            try:
+                                # 페이지 번호 요소들 찾기
+                                page_numbers = browser.find_elements(By.XPATH, '//a[contains(@class, "num")]')
+                                
+                                # 현재 페이지가 마지막인지 확인
+                                if not page_numbers:
+                                    print(f"더 이상 페이지가 없음 - {crawlingName}")
+                                    break
+                                
+                                # 다음 페이지 번호 찾기
+                                next_page_found = False
+                                for page_element in page_numbers:
+                                    if page_element.text.strip() == str(page + 1):
+                                        page_element.click()
+                                        next_page_found = True
+                                        page += 1
+                                        sleep(2)  # 페이지 로딩 대기
+                                        break
+                                
+                                # 다음 페이지를 찾지 못했다면
+                                if not next_page_found:
+                                    # 다음 페이지 그룹으로 이동 시도
+                                    try:
+                                        next_group = browser.find_element(By.XPATH, '//a[@class="edge_nav nav_next"]')
+                                        if 'nav_edge' not in next_group.get_attribute('class'):  # 비활성화 상태 체크
+                                            next_group.click()
+                                            sleep(2)
+                                            page += 1
+                                        else:
+                                            print(f"마지막 페이지 도달 - {crawlingName}")
+                                            break
+                                    except:
+                                        print(f"마지막 페이지 도달 - {crawlingName}")
+                                        break
+                                
+                                # 새 페이지 로딩 대기
+                                wait = WebDriverWait(browser, 10)
+                                wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
+                                
+                            except Exception as e:
+                                print(f"페이지 이동 중 오류 발생 - {crawlingName}: {str(e)}")
+                                break
+                                
+                        except Exception as e:
+                            print(f"{crawlingName} 카테고리 {page}페이지 처리 중 오류 발생: {str(e)}")
+                            break
 
                 except Exception as e:
                     print('Error - ' + crawlingName + ' ->')
                     print(traceback.format_exc())
                     self.errorList.append(crawlingName)
                     
-                    # 브라우저 세션 정리
+                    # 라우저 세션 정리
                     try:
                         browser.quit()
                     except:
@@ -245,8 +287,12 @@ class Crawler:
             print(f"Error: {e}")
             print(f"Directory does not exist for: {crawlingName}")
 
+        except Exception as e:
+            print(f"{crawlingName} 카테고리 크롤링 중 오류 발생: {str(e)}")
+            self.errorList.append(crawlingName)  # 오류 목록에 추가
+
         finally:
-            # 브라우저와 드라이버 정리
+            # 브라우저와 드이버 정리
             if browser:
                 try:
                     # 열려있는 모든 창 닫기
@@ -259,12 +305,13 @@ class Crawler:
                 try:
                     # 브라우저 종료
                     browser.quit()
+                    sleep(1)  # 브라우저 종료 후 잠시 대기
                 except:
                     pass
                 
                 try:
                     # 프로세스 강제 종료
-                    import psutil
+                    
                     process = psutil.Process(browser.service.process.pid)
                     for proc in process.children(recursive=True):
                         proc.kill()
@@ -274,7 +321,7 @@ class Crawler:
 
     def DataSort(self):
         """
-        크롤링된 데이터를 정렬하고, 정제하며, 중복을 제거하는 메서드
+        크롤링된 데이터를 정렬하고, 정제하며, 중복을 제거는 메서드
         """
         print('데이터 정렬 시작')
 
@@ -282,7 +329,7 @@ class Crawler:
             dataName = crawlingValue[STR_NAME].replace('/', '_')
             crawlingDataPath = os.path.join(DATA_PATH, f'{dataName}.csv')
             
-            # 정제된 데이터를 저장할 경로
+            # 정된 데이터를 저장할 경로
             cleaned_data_path = os.path.join(DATA_PATH, f"정제_중복제거_{dataName}.csv")
             
             if not os.path.exists(crawlingDataPath):
@@ -320,10 +367,10 @@ class Crawler:
         """
         제품 이름에서 단위와 괄호 내용을 제거하는 메서드
         """
-        # 끝 부분의 숫자와 단위(ml, 정, 포 등)를 제거하는 패턴
-        pattern = r'\s*\d+(?:\.\d+)?\s*(?:ml|정|포|l|g|kg|mg|개|can|캔|팩|페트|병|입|박스|캡슐|스틱|매|베지캡슐|분|da|달톤|mgα-te|mgne|㎍re|㎍|μg)(?:\s*x\s*\d+(?:개|팩|병|캔|박스|정|포|매|스틱)?)?\s*'
+        # 끝 부분의 숫자와 단위를 제거하는 패턴 (T, P 등의 단위 추가)
+        pattern = r'\s*\d+(?:\.\d+)?\s*(?:ml|정|포|l|g|kg|mg|개|can|캔|팩|페트|병|입|박스|캡슐|스틱|매|베지캡슐|분|da|달톤|mgα-te|mgne|㎍re|㎍|μg|T|P|세트)(?:\s*x\s*\d+(?:개|팩|병|캔|박스|정|포|매|스틱)?)?\s*'
         
-        # 괄호 안의 내용을 제거하는 패턴
+        # 괄호 안 내용을 제거하는 패턴
         bracket_pattern = r'\s*\([^)]*\)\s*'
         
         # 패턴을 반복적으로 적용
@@ -339,37 +386,60 @@ class Crawler:
         return cleaned
 
     def remove_duplicates_and_units(self, input_file, output_file):
-        """
-        입력 파일에서 중복을 제거고 단위를 정제하여 출력 파일에 저장하는 메서드
-        """
         unique_entries = defaultdict(list)
-
-        # 입력 파일 읽기
+        
         with open(input_file, 'r', encoding='utf-8') as f:
             reader = csv.reader(f)
             header = next(reader, None)
             for row in reader:
                 if row and len(row) >= 3:
-                    cleaned_name = self.clean_product_name(row[0])
-                    key = cleaned_name.split(',')[0]
-                    row[0] = cleaned_name
+                    original_name = row[0]
                     
-                    # 기존 항목이 없거나 더 많은 정보를 가진 행을 유지
-                    if key not in unique_entries or len(row[1]) > len(unique_entries[key][0][1]):
-                        unique_entries[key] = [row]
+                    # '+' 문자가 포함된 제품은 건너뛰기
+                    if '+' in original_name:
+                        print(f"제외된 제품 (+ 포함): {original_name}")
+                        continue
+                    
+                    cleaned_name = self.clean_product_name(original_name)  # 제품명 정제
+                    
+                    # 파일명에 사용할 수 없는 문자 제거
+                    safe_name = re.sub(r'[\\/*?:"<>|]', '_', cleaned_name)
+                    safe_name = safe_name.replace('  ', ' ').strip()
+                    key = cleaned_name.split(',')[0]
+                    
+                    # 이미지 파일 처리
+                    original_image = row[2]
+                    if original_image and os.path.exists(original_image):
+                        image_dir = os.path.dirname(original_image)
+                        new_image_path = os.path.join(image_dir, f"{safe_name}.jpg")
+                        
+                        try:
+                            if os.path.exists(original_image):
+                                if os.path.exists(new_image_path) and original_image != new_image_path:
+                                    os.remove(original_image)
+                                else:
+                                    os.rename(original_image, new_image_path)
+                                row[2] = new_image_path
+                        except Exception as e:
+                            print(f"이미지 이름 변경 실패 ({original_image} -> {new_image_path}): {str(e)}")
+                            row[2] = original_image
 
-        # 정제된 데이터를 출력 파일에 쓰기
+                    new_row = [cleaned_name, row[1], row[2]]
+                    if key not in unique_entries or len(row[1]) > len(unique_entries[key][0][1]):
+                        unique_entries[key] = [new_row]
+
+        # 정제된 데이터 저장
         with open(output_file, 'w', encoding='utf-8', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(header)
             for entries in unique_entries.values():
-                # 이미지 파일명도 정제된 이름으로 변경
-                entries[0][2] = self.update_image_name(entries[0][2], entries[0][0])
                 writer.writerow(entries[0])
+
+        print(f"데이터 정제 완료: {output_file}")
 
     def update_image_name(self, image_path, new_name):
         """
-        이미지 파일명을 정제된 이름으로 변경하는 메서드
+        이미지 파일을 정제된 이름으로 변경하는 메서드
         """
         if not image_path:
             return ''
@@ -391,20 +461,24 @@ class Crawler:
     def save_image(self, image_url, product_name, csv_name, max_retries=3):
         """
         이미지 URL에서 이미지를 다운로드하여 저장하는 메서드
-        max_retries: 최대 재시도 횟수
         """
+        # '+'가 포함된 제품은 건너뛰기
+        if '+' in product_name:
+            print(f"제외된 이미지 (+ 포함): {product_name}")
+            return ''
+        
         for attempt in range(max_retries):
             try:
-                if 'noImg' in image_url:  # 기본 이미지인 경우 저장하지 않음
+                if 'noImg' in image_url:
                     return ''
                 
                 # 이미지 저장 경로 생성
-                safe_csv_name = re.sub(r'[\\/*?:"<>|]', '', csv_name)
+                safe_csv_name = re.sub(r'[\\/*?:"<>|]', '_', csv_name)
                 image_dir = os.path.join(self.image_path, safe_csv_name)
                 if not os.path.exists(image_dir):
                     os.makedirs(image_dir)
                 
-                # 이미지 파일명 생성 (제품명에서 특수문자 제거)
+                # 이미지 파일명 생성 (원본 제품명 사용, 파일시스템 금지 문자만 제거)
                 safe_name = re.sub(r'[\\/*?:"<>|]', '', product_name)
                 image_filename = f"{safe_name}.jpg"
                 save_path = os.path.join(image_dir, image_filename)
@@ -413,54 +487,30 @@ class Crawler:
                 if os.path.exists(save_path):
                     return save_path
                 
-                # SSL 검증을 비활성화하고 이미지 다운로드
-                session = requests.Session()
-                session.mount('https://', requests.adapters.HTTPAdapter(
-                    max_retries=3,
-                    pool_connections=10,
-                    pool_maxsize=10
-                ))
-                
-                response = session.get(
-                    image_url, 
-                    verify=False,
-                    timeout=10,  # 타임아웃 설정
-                    headers={
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-                    }
-                )
-                response.raise_for_status()
-                
-                # 이미지 데이터 확인
-                if len(response.content) == 0:
-                    raise ValueError("Empty image data received")
-                
-                # 이미지 저장
-                with open(save_path, 'wb') as f:
-                    f.write(response.content)
-                
-                return save_path
-                
-            except (requests.exceptions.RequestException, 
-                    requests.exceptions.ConnectionError,
-                    requests.exceptions.Timeout,
-                    requests.exceptions.HTTPError) as e:
-                if attempt == max_retries - 1:  # 마지막 시도였다면
+                # 이미지 다운로드
+                response = requests.get(image_url, verify=False)
+                if response.status_code == 200:
+                    # 이미지 처리 및 저장
+                    img = Image.open(BytesIO(response.content))
+                    img = img.convert('RGB')  # PNG 등의 형식을 JPG로 변환
+                    img.save(save_path, 'JPEG')
+                    return save_path
+                else:
+                    print(f"이미지 다운로드 실패 (status code: {response.status_code}): {image_url}")
+                    return ''
+            
+            except Exception as e:
+                if attempt == max_retries - 1:
                     print(f"이미지 저장 실패 ({product_name}): {str(e)}")
                     return ''
                 else:
                     print(f"이미지 다운로드 재시도 중... ({attempt + 1}/{max_retries})")
-                    sleep(2)  # 재시도 전 대기
+                    sleep(2)
 
-        return ''  # 모든 시도 실패 시
+        return ''
 
 # 메인 실행 블록
 if __name__ == '__main__':
     crawler = Crawler()  # 크롤러 인스턴스 생성
     crawler.StartCrawling()  # 크롤링 시작
     crawler.DataSort()  # 데이터 정렬, 정제, 중복 제거 수행
-
-# SSL 경고 메시지 비활성화 (선택사항)
-import urllib3
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
