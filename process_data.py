@@ -1,7 +1,8 @@
 import pandas as pd
-import glob
 import re
 import os
+from typing import Tuple, Set, Optional
+import sqlite3
 
 def get_category_hierarchy():
     # 카테고리 계층 구조 정의
@@ -44,29 +45,29 @@ def get_category_hierarchy():
     }
     return category_hierarchy
 
-def categorize_text(text, category_hierarchy):
+def extract_serving_size(text: str) -> Tuple[Optional[int], Optional[str]]:
+    if pd.isna(text) or '[영양정보]' not in str(text):
+        return None, None
+    
+    pattern = r'1회 제공량\s*(\d+)\s*(ml|g)'
+    match = re.search(pattern, str(text))
+    
+    if match:
+        amount = int(match.group(1))
+        unit = match.group(2)
+        return amount, unit
+    return None, None
+
+def categorize_text(text: str, category_hierarchy: dict) -> Set[str]:
     categories = set()
-    serving_size = None  # 1회 제공량을 저장할 변수
     
-    # 1회 제공량 추출
-    if '[영양정보]' in text:
-        serving_match = re.search(r'1회 제공량\s*(\d+)(\w+)', text)
-        if serving_match:
-            amount = serving_match.group(1)
-            unit = serving_match.group(2)
-            serving_size = f"{amount}{unit}"  # 예: "500ml", "250ml" 등
-    
-    # ... 기존의 카테고리 분류 로직 ...
     for main_category, data in category_hierarchy.items():
-        # 메인 키워드 검사
         if any(keyword.lower() in text.lower() for keyword in data['keywords']):
             categories.add(main_category)
         
-        # 괄호 안의 내용 추출
         sub_parts = re.findall(r'\((.*?)\)', text)
         
         for sub_part in sub_parts:
-            # 괄호 안의 내용도 검사
             if sub_part:
                 sub_part = sub_part.lower()
                 if any(keyword.lower() in sub_part for keyword in data['keywords']):
@@ -77,49 +78,73 @@ def categorize_text(text, category_hierarchy):
                         categories.add(main_category)
                         categories.add(sub_category)
     
-    return categories, serving_size
+    return categories
 
-def process_csv_files():
-    csv_files = glob.glob('crawl_data/*.csv')
+def create_database():
+    conn = sqlite3.connect('products.db')
+    cursor = conn.cursor()
+    
+    cursor.execute('''
+    CREATE TABLE IF NOT EXISTS products (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT,
+        serving_amount INTEGER,
+        serving_unit TEXT,
+        category TEXT
+    )
+    ''')
+    
+    conn.commit()
+    return conn
+
+def process_files():
+    conn = create_database()
+    cursor = conn.cursor()
     category_hierarchy = get_category_hierarchy()
-    category_data = []  # 카테고리와 serving_size를 함께 저장할 리스트
     
-    for file_path in csv_files:
-        try:
-            df = pd.read_csv(file_path, encoding='utf-8')
-            
-            if 'Spec' in df.columns:
-                for text in df['Spec']:
-                    categories, serving_size = categorize_text(str(text), category_hierarchy)
+    folder_path = "crawl_data"
+    for file_name in os.listdir(folder_path):
+        if file_name.endswith('.csv'):
+            try:
+                file_path = os.path.join(folder_path, file_name)
+                df = pd.read_csv(file_path)
+                
+                for _, row in df.iterrows():
+                    name = row['Name']
+                    spec = str(row['Spec'])
                     
-                    # 각 카테고리별로 데이터 저장
+                    # 1회 제공량 추출
+                    serving_amount, serving_unit = extract_serving_size(spec)
+                    
+                    # 카테고리 추출
+                    categories = categorize_text(spec, category_hierarchy)
+                    
+                    # 데이터베이스에 저장
                     for category in categories:
-                        category_data.append({
-                            'Category': category,
-                            'Serving_Size': serving_size
-                        })
-        
-        except Exception as e:
-            print(f"Error processing {file_path}: {str(e)}")
+                        cursor.execute('''
+                        INSERT INTO products (name, serving_amount, serving_unit, category)
+                        VALUES (?, ?, ?, ?)
+                        ''', (name, serving_amount, serving_unit, category))
+                
+                conn.commit()
+                print(f"파일 처리 완료: {file_name}")
+                
+            except Exception as e:
+                print(f"파일 처리 중 오류 발생 ({file_name}): {e}")
     
-    # 데이터프레임 생성 및 카테고리별 집계
-    results_df = pd.DataFrame(category_data)
-    category_counts = results_df['Category'].value_counts().reset_index()
-    category_counts.columns = ['Category', 'Count']
+    # 처리 결과 출력
+    cursor.execute('''
+    SELECT category, COUNT(*) as count, 
+           COUNT(serving_amount) as serving_info_count
+    FROM products 
+    GROUP BY category
+    ''')
     
-    # Serving_Size 정보 추가
-    category_counts['Serving_Size'] = results_df.groupby('Category')['Serving_Size'].agg(lambda x: ', '.join(str(i) for i in set(x) if pd.notna(i))).values
+    print("\n=== 카테고리별 통계 ===")
+    for category, count, serving_count in cursor.fetchall():
+        print(f"- {category}: 총 {count}개 제품 (1회 제공량 정보 있음: {serving_count}개)")
     
-    # 결과 저장
-    category_counts.to_csv('카테고리_분석결과_상세.csv', index=False, encoding='utf-8-sig')
-    
-    print("\n=== 카테고리별 출현 빈도 ===")
-    for _, row in category_counts.iterrows():
-        print(f"- {row['Category']}: {row['Count']}회")
-    
-    print("\n분석 결과가 '카테고리_분석결과_상세.csv' 파일로 저장되었습니다.")
-    
-    return dict(zip(category_counts['Category'], category_counts['Count']))
+    conn.close()
 
-# 실행
-counts = process_csv_files()
+if __name__ == "__main__":
+    process_files()

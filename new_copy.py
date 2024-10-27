@@ -103,7 +103,7 @@ class Crawler:
         self.crawlingCategory = list()  # 크롤링할 카테고리 정보를 저장할 리스트
         
         # categories.csv 파일을 읽어 크롤링할 카테고리 목록을 로드
-        with open('categories.csv', 'r', newline='', encoding='utf-8') as file:
+        with open('categories.csv', 'r', newline='', encoding='utf-8-sig') as file:
             csv_reader = csv.reader(file, skipinitialspace=True)
             next(csv_reader)  # 첫 줄(헤더) 건너뛰기
             
@@ -154,7 +154,7 @@ class Crawler:
             crawlingDataPath = os.path.join(DATA_PATH, f'{crawlingName}.csv')
             
             # CSV 파일 열기 및 헤더 수정
-            with open(crawlingDataPath, 'w', newline='', encoding='utf-8') as crawlingFile:
+            with open(crawlingDataPath, 'w', newline='', encoding='utf-8-sig') as crawlingFile:
                 crawlingData_csvWriter = csv.writer(crawlingFile)
                 crawlingData_csvWriter.writerow(['Name', 'Spec', 'ImageURL'])
 
@@ -388,7 +388,7 @@ class Crawler:
     def remove_duplicates_and_units(self, input_file, output_file):
         unique_entries = defaultdict(list)
         
-        with open(input_file, 'r', encoding='utf-8') as f:
+        with open(input_file, 'r', encoding='utf-8-sig') as f:
             reader = csv.reader(f)
             header = next(reader, None)
             for row in reader:
@@ -429,7 +429,7 @@ class Crawler:
                         unique_entries[key] = [new_row]
 
         # 정제된 데이터 저장
-        with open(output_file, 'w', encoding='utf-8', newline='') as f:
+        with open(output_file, 'w', encoding='utf-8-sig', newline='') as f:
             writer = csv.writer(f)
             writer.writerow(header)
             for entries in unique_entries.values():
