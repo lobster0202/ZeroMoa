@@ -4,10 +4,157 @@ import pandas as pd
 import os
 import re
 from typing import Tuple, Set, Optional
+from nutrition import get_nutrition_fields
+
+FIELD_MAPPING = {
+    "열량": "energy_kcal",
+    "수분": "water_g",
+    "단백질": "protein_g",
+    "지방": "fat_g",
+    "회분": "ash_g",
+    "탄수화물": "carbohydrate_g",
+    "당류": "sugar_g",
+    "식이섬유": "dietary_fiber_g",
+    "칼슘": "calcium_mg",
+    "철": "iron_mg",
+    "인": "phosphorus_mg",
+    "칼륨": "potassium_mg",
+    "나트륨": "sodium_mg",
+    "비타민 A": "vitamin_a_μg_rae",
+    "레티놀": "retinol_μg",
+    "베타카로틴": "beta_carotene_μg",
+    "티아민": "thiamine_mg",
+    "리보플라빈": "riboflavin_mg",
+    "니아신": "niacin_mg",
+    "비타민 C": "vitamin_c_mg",
+    "비타민 D": "vitamin_d_μg",
+    "콜레스테롤": "cholesterol_mg",
+    "포화지방산": "saturated_fatty_acids_g",
+    "트랜스지방산": "trans_fatty_acids_g",
+    "니코틴산": "nicotinic_acid_mg",
+    "니코틴아마이드": "nicotinamide_mg",
+    "비오틴 / 바이오틴": "biotin_μg",
+    "비타민 B6": "vitamin_b6_mg",
+    "비타민 B12": "vitamin_b12_μg",
+    "엽산": "folate_μg_dfe",
+    "콜린": "choline_mg",
+    "판토텐산": "pantothenic_acid_mg",
+    "비타민 D2": "vitamin_d2_μg",
+    "비타민 D3": "vitamin_d3_μg",
+    "비타민 E": "vitamin_e_mg_alpha_te",
+    "알파 토코페롤": "alpha_tocopherol_mg",
+    "베타 토코페롤": "beta_tocopherol_mg",
+    "감마 토코페롤": "gamma_tocopherol_mg",
+    "델타 토코페롤": "delta_tocopherol_mg",
+    "알파 토코트리에놀": "alpha_tocotrienol_mg",
+    "베타 토코트리에놀": "beta_tocotrienol_mg",
+    "감마 토코트리에놀": "gamma_tocotrienol_mg",
+    "델타 토코트리에놀": "delta_tocotrienol_mg",
+    "비타민 K": "vitamin_k_μg",
+    "비타민 K1": "vitamin_k1_μg",
+    "비타민 K2": "vitamin_k2_μg",
+    "갈락토오스": "galactose_g",
+    "과당": "fructose_g",
+    "당알콜": "sugar_alcohol_g",
+    "맥아당": "maltose_g",
+    "알룰로오스": "allulose_g",
+    "에리스리톨": "erythritol_g",
+    "유당": "lactose_g",
+    "자당": "sucrose_g",
+    "타가토스": "tagatose_g",
+    "포도당": "glucose_g",
+    "불포화지방": "unsaturated_fat_g",
+    "EPA + DHA": "epa_dha_mg",
+    "가돌레산": "gadoleic_acid_mg",
+    "감마 리놀렌산": "gamma_linolenic_acid_mg",
+    "네르본산": "nervonic_acid_mg",
+    "도코사디에노산": "docosadienoic_acid_mg",
+    "도코사펜타에노산": "docosapentaenoic_acid_mg",
+    "도코사헥사에노산": "docosahexaenoic_acid_mg",
+    "디호모리놀렌산": "dihomo_gamma_linolenic_acid_mg",
+    "라우르산": "lauric_acid_mg",
+    "리그노세르산": "lignoceric_acid_mg",
+    "리놀레산": "linoleic_acid_g",
+    "미리스톨레산": "myristoleic_acid_mg",
+    "미리스트산": "myristic_acid_mg",
+    "박센산": "paullinic_acid_mg",
+    "베헨산": "behenic_acid_mg",
+    "부티르산": "butyric_acid_mg",
+    "스테아르산": "stearic_acid_mg",
+    "스테아리돈산": "stearidonic_acid_mg",
+    "아라키돈산": "arachidonic_acid_mg",
+    "아라키드산": "arachidic_acid_mg",
+    "알파리놀렌산": "alpha_linolenic_acid_g",
+    "에루크산": "erucic_acid_mg",
+    "에이코사디에노산": "eicosadienoic_acid_mg",
+    "에이코사트리에노산": "eicosatrienoic_acid_mg",
+    "에이코사펜타에노산": "eicosapentaenoic_acid_mg",
+    "오메가3 지방산": "omega_3_fatty_acid_g",
+    "오메가6 지방산": "omega_6_fatty_acid_g",
+    "올레산": "oleic_acid_mg",
+    "카프로산": "caproic_acid_mg",
+    "카프르산": "capric_acid_mg",
+    "카프릴산": "caprylic_acid_mg",
+    "트라이데칸산": "tridecanoic_acid_mg",
+    "트랜스 리놀레산": "trans_linoleic_acid_mg",
+    "트랜스 리놀렌산": "trans_linolenic_acid_mg",
+    "트랜스 올레산": "trans_oleic_acid_mg",
+    "트리코산산": "tricosanoic_acid_mg",
+    "팔미톨레산": "palmitoleic_acid_mg",
+    "팔미트산": "palmitic_acid_mg",
+    "펜타데칸산": "pentadecanoic_acid_mg",
+    "헨에이코산산": "heneicosanoic_acid_mg",
+    "헵타데센산": "heptadecenoic_acid_mg",
+    "헵타데칼산": "heptadecanoic_acid_mg",
+    "구리": "copper_μg",
+    "마그네슘": "magnesium_mg",
+    "망간": "manganese_mg",
+    "몰리브덴": "molybdenum_μg",
+    "불소": "fluoride_mg",
+    "셀레늄": "selenium_μg",
+    "아연": "zinc_mg",
+    "염소": "chlorine_mg",
+    "요오드": "iodine_μg",
+    "크롬": "chromium_μg",
+    "아미노산": "amino_acid_mg",
+    "필수아미노산": "essential_amino_acid_mg",
+    "비필수아미노산": "non_essential_amino_acid_mg",
+    "글루탐산": "glutamic_acid_mg",
+    "글리신": "glycine_mg",
+    "라이신": "lysine_mg",
+    "류신 / 루신": "leucine_mg",
+    "메티오닌": "methionine_mg",
+    "발린": "valine_mg",
+    "세린": "serine_mg",
+    "시스테인": "cysteine_mg",
+    "아르기닌": "arginine_mg",
+    "아스파르트산": "aspartic_acid_mg",
+    "알라닌": "alanine_mg",
+    "이소류신 / 이소루신": "isoleucine_mg",
+    "타우린": "taurine_mg"  ,
+    "트레오닌": "threonine_mg",
+    "트립토판": "tryptophan_mg",
+    "티로신": "tyrosine_mg",
+    "페닐알라닌": "phenylalanine_mg",
+    "프롤린": "proline_mg",
+    "히스티딘": "histidine_mg",
+    "카페인": "caffeine_mg",
+    "카페인함량": "caffeine_mg",  # 카페인과 동일하게 처리
+    "고카페인": "caffeine_mg",    # 카페인과 동일하게 처리
+    "HCA": "hca_mg",
+    "DHA+EPA": "epa_dha_mg",     # 기존 epa_dha_mg와 동일하게 처리
+    "자일로올리고당": "xylooligosaccharide_mg",
+    "락추로스": "lactulose_mg",
+    "락토페린": "lactoferrin_mg",
+    "알룰로스": "allulose_g",     # 기존 allulose_g와 동일하게 처리
+    "저분자 콜라겐펩타이드": "low_molecular_collagen_peptide_mg",
+    "카르니틴": "carnitine_mg",
+    "카테킨": "catechin_mg"
+}
 
 def get_db_connection():
     return psycopg2.connect(
-        user="zeromoa",
+        user="ZeroMoa",
         password="root",
         host="localhost",
         port="5432"
@@ -100,28 +247,221 @@ def get_category_no(category_name, cursor):
         print(f"카테고리 번호 조회 실패 ({category_name}): {str(e)}")
         return None
 
+def convert_nutrition_value(value_str: str, from_unit: str, to_unit: str) -> float:
+    """영양소 값을 다른 단위로 변환하는 함수"""
+    conversion_factors = {
+        'g_to_mg': 1000,
+        'g_to_μg': 1000000,
+        'mg_to_g': 0.001,
+        'mg_to_μg': 1000,
+        'μg_to_g': 0.000001,
+        'μg_to_mg': 0.001
+    }
+    
+    try:
+        # 숫자 추출
+        value = float(''.join(filter(lambda x: x.isdigit() or x == '.', value_str)))
+        
+        # 같은 단위면 변환 불필요
+        if from_unit == to_unit:
+            return value
+        
+        # 단위 변환
+        conversion_key = f'{from_unit}_to_{to_unit}'
+        if conversion_key in conversion_factors:
+            return value * conversion_factors[conversion_key]
+        
+        return None
+    except:
+        return None
+
+def get_base_unit(field_name: str) -> str:
+    """영양소 필드의 기준 단위를 반환하는 함수"""
+    english_name = FIELD_MAPPING.get(field_name)
+    if english_name:
+        if '_g' in english_name:
+            return 'g'
+        elif '_mg' in english_name:
+            return 'mg'
+        elif '_μg' in english_name:
+            return 'μg'
+    return None
+
 def extract_nutrition_info(description: str) -> dict:
+    FIELD_MAPPING = {
+        "열량": "energy_kcal",
+        "수분": "water_g",
+        "단백질": "protein_g",
+        "지방": "fat_g",
+        "회분": "ash_g",
+        "탄수화물": "carbohydrate_g",
+        "당류": "sugar_g",
+        "식이섬유": "dietary_fiber_g",
+        "칼슘": "calcium_mg",
+        "철": "iron_mg",
+        "인": "phosphorus_mg",
+        "칼륨": "potassium_mg",
+        "나트륨": "sodium_mg",
+        "비타민 A": "vitamin_a_μg_rae",
+        "레티놀": "retinol_μg",
+        "베타카로틴": "beta_carotene_μg",
+        "티아민": "thiamine_mg",
+        "리보플라빈": "riboflavin_mg",
+        "니아신": "niacin_mg",
+        "비타민 C": "vitamin_c_mg",
+        "비타민 D": "vitamin_d_μg",
+        "콜레스테롤": "cholesterol_mg",
+        "포화지방산": "saturated_fatty_acids_g",
+        "트랜스지방산": "trans_fatty_acids_g",
+        "니코틴산": "nicotinic_acid_mg",
+        "니코틴아마이드": "nicotinamide_mg",
+        "비오틴 / 바이오틴": "biotin_μg",
+        "비타민 B6": "vitamin_b6_mg",
+        "비타민 B12": "vitamin_b12_μg",
+        "엽산": "folate_μg_dfe",
+        "콜린": "choline_mg",
+        "판토텐산": "pantothenic_acid_mg",
+        "비타민 D2": "vitamin_d2_μg",
+        "비타민 D3": "vitamin_d3_μg",
+        "비타민 E": "vitamin_e_mg_alpha_te",
+        "알파 토코페롤": "alpha_tocopherol_mg",
+        "베타 토코페롤": "beta_tocopherol_mg",
+        "감마 토코페롤": "gamma_tocopherol_mg",
+        "델타 토코페롤": "delta_tocopherol_mg",
+        "알파 토코트리에놀": "alpha_tocotrienol_mg",
+        "베타 토코트리에놀": "beta_tocotrienol_mg",
+        "감마 토코트리에놀": "gamma_tocotrienol_mg",
+        "델타 토코트리에놀": "delta_tocotrienol_mg",
+        "비타민 K": "vitamin_k_μg",
+        "비타민 K1": "vitamin_k1_μg",
+        "비타민 K2": "vitamin_k2_μg",
+        "갈락토오스": "galactose_g",
+        "과당": "fructose_g",
+        "당알콜": "sugar_alcohol_g",
+        "맥아당": "maltose_g",
+        "알룰로오스": "allulose_g",
+        "에리스리톨": "erythritol_g",
+        "유당": "lactose_g",
+        "자당": "sucrose_g",
+        "타가토스": "tagatose_g",
+        "포도당": "glucose_g",
+        "불포화지방": "unsaturated_fat_g",
+        "EPA + DHA": "epa_dha_mg",
+        "가돌레산": "gadoleic_acid_mg",
+        "감마 리놀렌산": "gamma_linolenic_acid_mg",
+        "네르본산": "nervonic_acid_mg",
+        "도코사디에노산": "docosadienoic_acid_mg",
+        "도코사펜타에노산": "docosapentaenoic_acid_mg",
+        "도코사헥사에노산": "docosahexaenoic_acid_mg",
+        "디호모리놀렌산": "dihomo_gamma_linolenic_acid_mg",
+        "라우르산": "lauric_acid_mg",
+        "리그노세르산": "lignoceric_acid_mg",
+        "리놀레산": "linoleic_acid_g",
+        "미리스톨레산": "myristoleic_acid_mg",
+        "미리스트산": "myristic_acid_mg",
+        "박센산": "paullinic_acid_mg",
+        "베헨산": "behenic_acid_mg",
+        "부티르산": "butyric_acid_mg",
+        "스테아르산": "stearic_acid_mg",
+        "스테아리돈산": "stearidonic_acid_mg",
+        "아라키돈산": "arachidonic_acid_mg",
+        "아라키드산": "arachidic_acid_mg",
+        "알파리놀렌산": "alpha_linolenic_acid_g",
+        "에루크산": "erucic_acid_mg",
+        "에이코사디에노산": "eicosadienoic_acid_mg",
+        "에이코사트리에노산": "eicosatrienoic_acid_mg",
+        "에이코사펜타에노산": "eicosapentaenoic_acid_mg",
+        "오메가3 지방산": "omega_3_fatty_acid_g",
+        "오메가6 지방산": "omega_6_fatty_acid_g",
+        "올레산": "oleic_acid_mg",
+        "카프로산": "caproic_acid_mg",
+        "카프르산": "capric_acid_mg",
+        "카프릴산": "caprylic_acid_mg",
+        "트라이데칸산": "tridecanoic_acid_mg",
+        "트랜스 리놀레산": "trans_linoleic_acid_mg",
+        "트랜스 리놀렌산": "trans_linolenic_acid_mg",
+        "트랜스 올레산": "trans_oleic_acid_mg",
+        "트리코산산": "tricosanoic_acid_mg",
+        "팔미톨레산": "palmitoleic_acid_mg",
+        "팔미트산": "palmitic_acid_mg",
+        "펜타데칸산": "pentadecanoic_acid_mg",
+        "헨에이코산산": "heneicosanoic_acid_mg",
+        "헵타데센산": "heptadecenoic_acid_mg",
+        "헵타데칼산": "heptadecanoic_acid_mg",
+        "구리": "copper_μg",
+        "마그네슘": "magnesium_mg",
+        "망간": "manganese_mg",
+        "몰리브덴": "molybdenum_μg",
+        "불소": "fluoride_mg",
+        "셀레늄": "selenium_μg",
+        "아연": "zinc_mg",
+        "염소": "chlorine_mg",
+        "요오드": "iodine_μg",
+        "크롬": "chromium_μg",
+        "아미노산": "amino_acid_mg",
+        "필수아미노산": "essential_amino_acid_mg",
+        "비필수아미노산": "non_essential_amino_acid_mg",
+        "글루탐산": "glutamic_acid_mg",
+        "글리신": "glycine_mg",
+        "라이신": "lysine_mg",
+        "류신 / 루신": "leucine_mg",
+        "메티오닌": "methionine_mg",
+        "발린": "valine_mg",
+        "세린": "serine_mg",
+        "시스테인": "cysteine_mg",
+        "아르기닌": "arginine_mg",
+        "아스파르트산": "aspartic_acid_mg",
+        "알라닌": "alanine_mg",
+        "이소류신 / 이소루신": "isoleucine_mg",
+        "타우린": "taurine_mg"  ,
+        "트레오닌": "threonine_mg",
+        "트립토판": "tryptophan_mg",
+        "티로신": "tyrosine_mg",
+        "페닐알라닌": "phenylalanine_mg",
+        "프롤린": "proline_mg",
+        "히스티딘": "histidine_mg",
+        "카페인": "caffeine_mg",
+        "카페인함량": "caffeine_mg",  # 카페인과 동일하게 처리
+        "고카페인": "caffeine_mg",    # 카페인과 동일하게 처리
+        "HCA": "hca_mg",
+        "DHA+EPA": "epa_dha_mg",     # 기존 epa_dha_mg와 동일하게 처리
+        "자일로올리고당": "xylooligosaccharide_mg",
+        "락추로스": "lactulose_mg",
+        "락토페린": "lactoferrin_mg",
+        "알룰로스": "allulose_g",     # 기존 allulose_g와 동일하게 처리
+        "저분자 콜라겐펩타이드": "low_molecular_collagen_peptide_mg",
+        "카르니틴": "carnitine_mg",
+        "카테킨": "catechin_mg"
+    }
+    
     nutrition_info = {}
     if "[영양정보]" in description:
         try:
             nutrition_text = description.split("[영양정보]")[1].split("/")
             for item in nutrition_text:
                 if ":" in item:
-                    try:
-                        # maxsplit=1을 사용하여 첫 번째 콜론만 기준으로 분리
-                        parts = item.split(":", 1)
-                        if len(parts) == 2:
-                            key, value = parts
-                            key = key.strip()
-                            value = value.strip()
-                            if "kcal" in value.lower():
-                                # 쉼표 제거 및 숫자만 추출
-                                kcal_match = re.search(r'(\d+(?:,\d+)?)', value)
-                                if kcal_match:
-                                    kcal_str = kcal_match.group(1).replace(',', '')
-                                    nutrition_info["energy_kcal"] = float(kcal_str)
-                    except ValueError:
-                        continue  # 개별 항목 파싱 실패 시 다음 항목으로
+                    key, value = [x.strip() for x in item.split(":", 1)]
+                    
+                    # FIELD_MAPPING에서 매칭되는 영양소 찾기
+                    if key in FIELD_MAPPING:
+                        field_name = FIELD_MAPPING[key]
+                        
+                        # 현재 값의 단위 추출
+                        current_unit = None
+                        for unit in ['mg', 'μg', 'g']:
+                            if unit in value:
+                                current_unit = unit
+                                break
+                        
+                        if current_unit:
+                            # 기준 단위 확인
+                            base_unit = get_base_unit(key)
+                            if base_unit:
+                                # 숫자 값 추출 및 단위 변환
+                                converted_value = convert_nutrition_value(value, current_unit, base_unit)
+                                if converted_value is not None:
+                                    nutrition_info[field_name] = converted_value
+                                    
         except Exception as e:
             print(f"영양정보 추출 중 오류: {str(e)}")
     return nutrition_info
@@ -145,15 +485,21 @@ def process_product_data(row, cursor, category_hierarchy):
         # 영양정보 추출
         nutrition_info = extract_nutrition_info(description)
         
-        return {
+        # 기본 제품 정보
+        product_data = {
             'product_name': product_name,
-            'imageurl': image_path,  # 이 키는 SQL 쿼리의 %(imageurl)s와 매칭됨
+            'imageurl': image_path,
             'serving_size': serving_size,
             'serving_unit': serving_unit,
             'category_no': category_no,
             'company_name': None,
-            'energy_kcal': nutrition_info.get('energy_kcal')
         }
+        
+        # 영양정보 추가
+        product_data.update(nutrition_info)
+        
+        return product_data
+        
     except Exception as e:
         print(f"제품 데이터 처리 중 오류: {str(e)}")
         return None
@@ -177,14 +523,18 @@ def insert_products(file_path):
             try:
                 product_data = process_product_data(row, cursor, category_hierarchy)
                 if product_data:
-                    cursor.execute("""
+                    # 든 영양소 정보를 포함하여 product 테이블에 한 번에 삽입
+                    columns = ', '.join(product_data.keys())
+                    placeholders = ', '.join(['%s'] * len(product_data))
+                    values = list(product_data.values())
+                    
+                    cursor.execute(f"""
                         INSERT INTO product(
-                            product_name, imageurl, serving_size, serving_unit, 
-                            category_no, company_name, energy_kcal
-                        ) VALUES (%(product_name)s, %(imageurl)s, %(serving_size)s, 
-                                 %(serving_unit)s, %(category_no)s, %(company_name)s, 
-                                 %(energy_kcal)s)
-                    """, product_data)
+                            {columns}
+                        ) VALUES (
+                            {placeholders}
+                        )
+                    """, values)
                     
                     conn.commit()
                     success_count += 1
