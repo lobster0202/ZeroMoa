@@ -1,0 +1,233 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+#  Usually these files are written by a python script from a template
+#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+*.manifest
+*.spec
+
+# Installer logs
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# Translations
+*.mo
+*.pot
+
+# Django stuff:
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+
+# Flask stuff:
+instance/
+.webassets-cache
+
+# Scrapy stuff:
+.scrapy
+
+# Sphinx documentation
+docs/_build/
+
+# PyBuilder
+.pybuilder/
+target/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# IPython
+profile_default/
+ipython_config.py
+
+# pyenv
+#   For a library or package, you might want to ignore these files since the code is
+#   intended to run in multiple environments; otherwise, check them in:
+# .python-version
+
+# pipenv
+#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
+#   However, in case of collaboration, if having platform-specific dependencies or dependencies
+#   having no cross-platform support, pipenv may install dependencies that don't work, or not
+#   install all needed dependencies.
+#Pipfile.lock
+
+# poetry
+#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
+#   This is especially recommended for binary packages to ensure reproducibility, and is more
+#   commonly ignored for libraries.
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
+#poetry.lock
+
+# pdm
+#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
+#pdm.lock
+#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
+#   in version control.
+#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
+.pdm.toml
+.pdm-python
+.pdm-build/
+
+# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
+__pypackages__/
+
+# Celery stuff
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# PyCharm
+#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
+#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
+#  and can be added to the global gitignore or merged into this file.  For a more nuclear
+#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
+#.idea/
+
+#데이터 파일
+crawl_data/
+crawl_data/정제_중복제거_건강 단백질 보충제.csv
+crawl_data/정제_중복제거_TV홈쇼핑 건강식품.csv
+crawl_data/정제_중복제거_가르시니아.csv
+crawl_data/정제_중복제거_건강 단백질 보충제.csv
+crawl_data/정제_중복제거_건강즙_환_분말.csv
+crawl_data/정제_중복제거_고추장_된장_간장류.csv
+crawl_data/정제_중복제거_과자.csv
+crawl_data/정제_중복제거_과채주스_음료.csv
+crawl_data/정제_중복제거_녹용_흑염소.csv
+crawl_data/정제_중복제거_녹차_허브차_꽃차.csv
+crawl_data/정제_중복제거_다이어트 보조제.csv
+crawl_data/정제_중복제거_다이어트 유산균.csv
+crawl_data/정제_중복제거_닭가슴살.csv
+crawl_data/정제_중복제거_대용량 과자.csv
+crawl_data/정제_중복제거_대용량 조미료_장류.csv
+crawl_data/정제_중복제거_대용량 커피_차.csv
+crawl_data/정제_중복제거_두유_아몬드음료.csv
+crawl_data/정제_중복제거_무알콜맥주_음료.csv
+crawl_data/정제_중복제거_밀가루_곡물가루.csv
+crawl_data/정제_중복제거_보리차_차음료.csv
+crawl_data/정제_중복제거_비타민_미네랄.csv
+crawl_data/정제_중복제거_빵_떡_한과.csv
+crawl_data/정제_중복제거_사무실용 간식.csv
+crawl_data/정제_중복제거_생수.csv
+crawl_data/정제_중복제거_설탕_소금_후추.csv
+crawl_data/정제_중복제거_술_전통주_와인.csv
+crawl_data/정제_중복제거_시럽_색소_향료.csv
+crawl_data/정제_중복제거_시리얼.csv
+crawl_data/정제_중복제거_시서스.csv
+crawl_data/정제_중복제거_식용유_참기름.csv
+crawl_data/정제_중복제거_쌍화_생강_전통차.csv
+crawl_data/정제_중복제거_아이스크림_팥빙수.csv
+crawl_data/정제_중복제거_아이스티_에이드.csv
+crawl_data/정제_중복제거_에너지_이온음료.csv
+crawl_data/정제_중복제거_에너지바_프로틴바.csv
+crawl_data/정제_중복제거_영양제.csv
+crawl_data/정제_중복제거_오일_양념 선물세트.csv
+crawl_data/정제_중복제거_요거트_요구르트.csv
+crawl_data/정제_중복제거_우유.csv
+crawl_data/정제_중복제거_원두커피_드립백.csv
+crawl_data/정제_중복제거_원물간식_견과류.csv
+crawl_data/정제_중복제거_유산균.csv
+crawl_data/정제_중복제거_유자_과일차.csv
+crawl_data/정제_중복제거_육수_찌개양념.csv
+crawl_data/정제_중복제거_율무_곡물차.csv
+crawl_data/정제_중복제거_이너뷰티_글루타치온.csv
+crawl_data/정제_중복제거_이너뷰티.csv
+crawl_data/정제_중복제거_잼류_스프레드.csv
+crawl_data/정제_중복제거_전체보기.csv
+crawl_data/정제_중복제거_제로음료.csv
+crawl_data/정제_중복제거_제로칼로리음료.csv
+crawl_data/정제_중복제거_조미료_물엿_식초.csv
+crawl_data/정제_중복제거_차음료.csv
+crawl_data/정제_중복제거_초콜릿_사탕_젤리.csv
+crawl_data/정제_중복제거_캡슐커피.csv
+crawl_data/정제_중복제거_커피믹스.csv
+crawl_data/정제_중복제거_커피음료.csv
+crawl_data/정제_중복제거_케찹_소스_드레싱.csv
+crawl_data/정제_중복제거_콜라_사이다_환타.csv
+crawl_data/정제_중복제거_콜라겐.csv
+crawl_data/정제_중복제거_탄산수.csv
+crawl_data/정제_중복제거_프로폴리스_꿀.csv
+crawl_data/정제_중복제거_핫초코_코코아.csv
+crawl_data/정제_중복제거_헬스 단백질 보충제.csv
+crawl_data/정제_중복제거_헬스보충제_아미노산.csv
+crawl_data/정제_중복제거_홍삼.csv
+crawl_data/정제_중복제거_홍차_밀크티.csv
+crawl_data/정제_중복제거_환자영양식_균형식.csv
